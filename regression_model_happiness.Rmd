@@ -1,0 +1,254 @@
+---
+title: "Analysis World Happiness Report in 2019 with Regression Model"
+author: "Gasha Sarwono"
+date: "2-May-2021"
+output: 
+  html_document:
+    theme: flatly
+    higlight: zenburn
+    toc: true
+    toc_float:
+      collapsed: false
+    df_print: paged
+---
+
+![](D:\Data Scientist\happy.jpg)
+
+### Background
+
+#### The Data is a survey about happiness which contains aspects of happiness
+
+#### My Purpose using this data is to predict the important factors that influence of happiness
+
+#### Data Description:
+##### Score: Score of happiness
+##### GDP.per.capita: Effect Gross Domestic Product per capita
+##### Social.support: Effect Social Support
+##### Healthy.life.expectancy: Effect Health Life Expectancy
+##### Freedom.to.make.life.choices: Effect Freedom Life Choices
+##### Generosity: Effect to help each other
+##### Perceptions.of.corruption: Effect incident corruption 
+
+#### The data I get from Kaggle with this following link:
+
+#### https://www.kaggle.com/unsdsn/world-happiness
+
+### Set Up
+
+**Activated library**
+
+```{r message=FALSE, warning=FALSE}
+
+library(GGally) #check correlation
+library(dplyr) #piping daya
+library(rsample) #sampling data
+library(tidyverse) #wrangling data
+library(lmtest) #check assumption
+library(car) #check vif
+library(MLmetrics) #calculate error
+
+```
+
+**Import Data**
+
+Import data csv
+```{r}
+rawdata <- read.csv("2019.csv", sep=",")
+rawdata
+```
+
+**Subsetting Data**
+
+Select colomn what I need
+```{r}
+happy <- rawdata[,c("Score","GDP.per.capita","Social.support","Healthy.life.expectancy","Freedom.to.make.life.choices","Generosity","Perceptions.of.corruption"
+)]
+happy
+```
+
+### Data Inspection
+
+**Check Data Type**
+
+```{r}
+glimpse(happy)
+```
+
+All data type already appropriate
+
+**Check missing value**
+
+```{r}
+colSums(is.na(happy))
+```
+
+All column no have missing value
+
+### Create Model
+
+**Cross Validation**
+
+*Dataset happy divided into 2 for traning and testing:*
+
+*1) data_train: 80% from dataset, its function for traning model*
+
+*2) data_test: 20% from dataset, its function for testing model*
+
+```{r warning=FALSE}
+RNGkind(sample.kind = "Rounding")
+set.seed(1616)
+init <- initial_split(happy,
+                      prop = 0.8,
+                      strata = Score) 
+happy_train <- training(init) 
+happy_test <- testing(init) 
+```
+
+**Create Regression Model**
+
+Create regresion linear model and filtering predictor variabel with stepwise method
+
+```{r}
+rawmodelhappy <- lm(Score~.,happy_train)
+model_rawmodelhappy <- step(rawmodelhappy, direction = "backward")
+```
+
+Variable "Perceptions.of.corruption" is delete because it does not really affect target variable "Score"
+
+```{r}
+summary(model_rawmodelhappy)
+```
+
+Variable "Generosity" has a p-value > 0.05, its means that variable is not significant, so it can be delete
+
+**ReCreate Regresion Model**
+
+```{r}
+model_linear_happy <- lm(Score~ . -Perceptions.of.corruption -Generosity,happy_train)
+model_happy <- step(model_linear_happy, direction = "backward")
+```
+
+```{r}
+summary(model_happy)
+```
+
+***Based on Summary model_happy, we get information:***
+
+*1. Best (lowest) AIC score is -151.95*
+
+*2. Adjusted R-Squared value is 0.753 or 75.3%, its mean model can explain the variation data from target variable (Score)*
+
+*3. The p-value of each predictor variable is less than 0.05 (p-value <0.05), its mean each predictor variable is significant or affected to target variable (Score) *
+
+*4. Each variable has an added value for the target variable, for more details, see the following formula:*
+
+$$
+Score = 1.8590 + (0.8092\times GDP.per.capita) + (1.0442\times Social.support) +
+$$
+$$
+(1.2005\times Healthy.life.expectancy) + (1.7290\times Freedom.to.make.life.choices)
+$$
+
+### Evaluation
+
+**Prediction**
+
+After creating a formula for target variable, the next step is evaluate it
+
+```{r}
+pred_test <- predict(model_happy, newdata = happy_test)
+head(pred_test)
+```
+
+**Error Check**
+
+```{r}
+RMSE(pred_test, happy_test$Score)
+```
+
+By checking the error using RMSE (Root Mean Squared Error), get result model will deviate from the actual data as much as 0.5324381
+
+### Assumption
+
+*Multicoloniarity*
+
+```{r}
+vif(model_happy)
+```
+
+VIF value is lower than 10, it means that our variables from our tunned datasets are all independent
+
+*Normality*
+
+```{r}
+qqPlot(model_happy$residuals)
+```
+
+```{r}
+plot(density(model_happy$residuals))
+```
+
+We can see that the plot above as the normality of the residual looks good .
+
+*Heterodasticity*
+
+```{r}
+plot(model_happy$fitted.values, #prediksi
+     model_happy$residuals) #eror
+```
+
+If we check the plot above, we can see there is a presence of a shape. It means that heteroscedacity is present.
+
+*Linearity*
+
+```{r}
+data.frame(prediction=model_happy$fitted.values,
+     error=model_happy$residuals) %>% 
+  ggplot(aes(prediction,error)) +
+  geom_hline(yintercept=0) +
+  geom_point() +
+  geom_smooth() +
+  theme_bw()
+```
+
+From plot above, There is little to no discernible pattern in our residual plot, we can conclude that our model is linear.
+
+### Conclusion
+
+**Based on make model for prediction (model_happy) it can be concluded:**
+
+**1. R-Squared**
+**model_happy has a value of 0.753, so it means based on the R-Squared value for model_happy it can explain variation data in target variable "Score" 0.753 (75.3%) **
+
+**2. Error**
+**From results of the error test using RMSE (Root Mean Squared Error) model_happy has a value of 0.5324381, so it can be said that the possibility that the model will deviate from the actual data is only 0.5324381 **
+
+**3. Assumption**
+
+**From the results of the assumptions for the model based on the graphs and tests, the model already appropiate criteria from actual data **
+
+**So can be concluded that in determining happiness, an important variable can be seen from model_happy. The important variables are GDP.per.capita, Social.support, Healthy.life.expectancy, Freedom.to.make.life.choices.**
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
